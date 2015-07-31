@@ -56,6 +56,7 @@ class WindowsServiceInstanceManager(service_instance.ServiceInstanceManager):
     _INSTANCE_CONNECTION_PROTO = "WinRM"
     _CBS_INIT_RUN_PLUGIN_AFTER_REBOOT = 2
     _CBS_INIT_WINRM_PLUGIN = "ConfigWinRMListenerPlugin"
+    _DEFAULT_MINIMUM_PASS_LENGTH = 6
 
     def __init__(self, driver_config=None, remote_execute=None):
         super(WindowsServiceInstanceManager, self).__init__(
@@ -115,6 +116,8 @@ class WindowsServiceInstanceManager(service_instance.ServiceInstanceManager):
     def _check_password_complexity(self, password):
         # Make sure that the Windows complexity requirements are met:
         # http://technet.microsoft.com/en-us/library/cc786468(v=ws.10).aspx
+        if len(password) < self._DEFAULT_MINIMUM_PASS_LENGTH:
+            return False
         for r in ["[a-z]", "[A-Z]", "[0-9]"]:
             if not re.search(r, password):
                 return False
@@ -203,7 +206,7 @@ class WindowsServiceInstanceManager(service_instance.ServiceInstanceManager):
             raise exception.ServiceInstanceException(
                 _('%(conn_proto)s connection has not been '
                   'established to %(server)s in %(time)ss. Giving up.') % {
-                      'conn_proto': self._INSTNACE_CONNECTION_PROTO,
+                      'conn_proto': self._INSTANCE_CONNECTION_PROTO,
                       'server': server['ip'],
                       'time': self.max_time_to_build_instance})
 
