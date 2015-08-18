@@ -4,8 +4,6 @@ from manila import exception
 from manila.share.configuration import Configuration
 from manila.share.drivers import service_instance as generic_service_instance
 from manila.share.drivers.windows import service_instance
-from manila.share.drivers.windows.service_instance import (
-    WindowsServiceInstanceManager as service_manager)
 from manila.share.drivers.windows import windows_utils
 from manila import test
 import mock
@@ -16,6 +14,7 @@ CONF = cfg.CONF
 CONF.import_opt('driver_handles_share_servers',
                 'manila.share.driver')
 CONF.register_opts(generic_service_instance.common_opts)
+service_manager = service_instance.WindowsServiceInstanceManager
 
 
 class WindowsServiceInstanceManagerTestCase(test.TestCase):
@@ -313,6 +312,32 @@ class WindowsServiceInstanceManagerTestCase(test.TestCase):
         self._test_setup_security_service(
             expected_exception=exception.ServiceInstanceException,
             domain_mismatch=True)
+
+    def _test_get_valid_security_service(self, security_services=None):
+        result = self._service_instance.get_valid_security_service(
+            security_services)
+
+        if (security_services and
+                security_services[0]['type'] == 'active_directory'):
+            self.assertEqual(security_services[0], result)
+        else:
+            self.assertEqual(None, result)
+
+    def test_get_valid_security_service_with_ad(self):
+        security_services = [{'type': 'active_directory'}]
+        self._test_get_valid_security_service(security_services)
+
+    def test_get_valid_security_service_without_ad(self):
+        security_services = [{'type': mock.sentinel.type}]
+        self._test_get_valid_security_service(security_services)
+
+    def test_get_invalid_security_service(self):
+        self._test_get_valid_security_service()
+
+    def test_get_multiple_security_service(self):
+        security_services = [{'type': mock.sentinel.type},
+                             {'another_type': mock.sentinel.another_type}]
+        self._test_get_valid_security_service(security_services)
 
     @mock.patch.object(service_manager, '_get_cbs_init_reg_section')
     def test_run_cloudbase_init_plugin_after_reboot(self, mock_cbs_init_reg):

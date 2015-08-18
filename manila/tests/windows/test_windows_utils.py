@@ -112,7 +112,7 @@ class WindowsUtilsTestCase(test.TestCase):
 
     def test_get_disk_number_by_mount_path(self):
         _FAKE_DISK_NUMBER = "10"
-        self._test_get_disk_number_by_serial_number(
+        self._test_get_disk_number_by_mount_path(
             out_value=_FAKE_DISK_NUMBER)
 
     def test_get_disk_number_by_mount_path_invalid(self):
