@@ -14,15 +14,16 @@
 #    under the License.
 
 import ddt
+import mock
+
 from manila.share.drivers.windows import windows_utils
 from manila import test
-import mock
 
 
 @ddt.ddt
 class WindowsUtilsTestCase(test.TestCase):
     def setUp(self):
-        self._remote_exec = mock.MagicMock()
+        self._remote_exec = mock.Mock()
         self._windows_utils = windows_utils.WindowsUtils(self._remote_exec)
         super(WindowsUtilsTestCase, self).setUp()
 
@@ -54,10 +55,7 @@ class WindowsUtilsTestCase(test.TestCase):
         self._remote_exec.assert_called_once_with(mock.sentinel.server,
                                                   cmd)
 
-    @mock.patch.object(windows_utils.WindowsUtils, '_quote_string')
-    def test_add_access_path(self, mock_quote_string):
-        mock_quote_string.return_value = mock.sentinel.quote_string
-
+    def test_add_access_path(self):
         self._windows_utils.add_access_path(mock.sentinel.server,
                                             mock.sentinel.mount_path,
                                             mock.sentinel.disk_number,
@@ -66,8 +64,9 @@ class WindowsUtilsTestCase(test.TestCase):
         cmd = ["Add-PartitionAccessPath", "-DiskNumber",
                mock.sentinel.disk_number,
                "-PartitionNumber", mock.sentinel.partition_number,
-               "-AccessPath", mock.sentinel.quote_string]
-        mock_quote_string.assert_called_once_with(mock.sentinel.mount_path)
+               "-AccessPath", self._windows_utils._quote_string(
+                   mock.sentinel.mount_path)
+               ]
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
 
     def test_resize_partition(self):
@@ -81,11 +80,10 @@ class WindowsUtilsTestCase(test.TestCase):
                '-Size', mock.sentinel.size_bytes]
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
 
-    # FAKE_DISK_NUMBER and EMPTY_DISK_NUMBER
     @ddt.data("1", "")
-    def test_get_disk_number_by_serial_number(self, cmd_output):
+    def test_get_disk_number_by_serial_number(self, disk_number):
         mock_serial_number = "serial_number"
-        self._remote_exec.return_value = (cmd_output, mock.sentinel.cmd_err)
+        self._remote_exec.return_value = (disk_number, mock.sentinel.cmd_err)
 
         result = self._windows_utils.get_disk_number_by_serial_number(
             mock.sentinel.server,
@@ -96,16 +94,15 @@ class WindowsUtilsTestCase(test.TestCase):
                "Where-Object {$_.SerialNumber -like '%s'} | "
                "Select-Object -ExpandProperty Number" % pattern)
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
-        if cmd_output != "":
-            self.assertEqual(int(cmd_output), result)
+        if disk_number != "":
+            self.assertEqual(int(disk_number), result)
         else:
             self.assertEqual(None, result)
 
-    # FAKE_DISK_NUMBER and EMPTY_DISK_NUMBER
     @ddt.data("1", "")
-    def test_get_disk_number_by_mount_path(self, cmd_output):
+    def test_get_disk_number_by_mount_path(self, disk_number):
         _FAKE_MOUNT_PATH = ""
-        self._remote_exec.return_value = (cmd_output, mock.sentinel.cmd_err)
+        self._remote_exec.return_value = (disk_number, mock.sentinel.cmd_err)
 
         result = self._windows_utils.get_disk_number_by_mount_path(
             mock.sentinel.server,
@@ -116,18 +113,16 @@ class WindowsUtilsTestCase(test.TestCase):
                'Select-Object -ExpandProperty DiskNumber' %
                (_FAKE_MOUNT_PATH + "\\"))
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
-        if cmd_output != "":
-            self.assertEqual(int(cmd_output), result)
+        if disk_number != "":
+            self.assertEqual(int(disk_number), result)
         else:
             self.assertEqual(None, result)
 
-    @mock.patch.object(windows_utils.WindowsUtils, '_quote_string')
-    def test_get_disk_size_by_path(self, mock_quote_string):
+    def test_get_disk_size_by_path(self):
         _FAKE_DISK_SIZE = "1024"
-        self._windows_utils._fsutil_total_space_regex = mock.MagicMock()
+        self._windows_utils._fsutil_total_space_regex = mock.Mock()
         self._windows_utils._fsutil_total_space_regex.findall.return_value = (
             _FAKE_DISK_SIZE)
-        mock_quote_string.return_value = mock.sentinel.quote_string
         self._remote_exec.return_value = (_FAKE_DISK_SIZE,
                                           mock.sentinel.cmd_err)
 
@@ -135,9 +130,9 @@ class WindowsUtilsTestCase(test.TestCase):
             mock.sentinel.server,
             mock.sentinel.mount_path)
 
-        cmd = ["fsutil", "volume", "diskfree", mock.sentinel.quote_string]
+        cmd = ["fsutil", "volume", "diskfree",
+               self._windows_utils._quote_string(mock.sentinel.mount_path)]
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
-        mock_quote_string.assert_called_once_with(mock.sentinel.mount_path)
         self.assertEqual(long(_FAKE_DISK_SIZE[1]), result)
 
     def test_get_partition_maximum_size(self):
@@ -230,37 +225,31 @@ class WindowsUtilsTestCase(test.TestCase):
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
         self.assertEqual(_FAKE_DOMAIN.strip(), result)
 
-    @mock.patch.object(windows_utils.WindowsUtils, '_quote_string')
-    def test_ensure_directory_exists(self, mock_quote_string):
-        mock_quote_string.return_value = mock.sentinel.quote_string
-
+    def test_ensure_directory_exists(self):
         self._windows_utils.ensure_directory_exists(mock.sentinel.server,
                                                     mock.sentinel.path)
 
-        cmd = ["New-Item", "-ItemType", "Directory",
-               "-Force", "-Path", mock.sentinel.quote_string]
-        mock_quote_string.assert_called_once_with(mock.sentinel.path)
+        cmd = ["New-Item", "-ItemType", "Directory", "-Force", "-Path",
+               self._windows_utils._quote_string(mock.sentinel.path)]
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
 
     @ddt.data(False, True)
     @mock.patch.object(windows_utils.WindowsUtils, 'path_exists')
-    @mock.patch.object(windows_utils.WindowsUtils, '_quote_string')
-    def test_remove(self, is_junction, mock_quote_string, mock_path_exists):
-        mock_quote_string.return_value = mock.sentinel.quote_string
-
+    def test_remove(self, is_junction, mock_path_exists):
         self._windows_utils.remove(mock.sentinel.server,
                                    mock.sentinel.path,
                                    is_junction=is_junction)
 
-        mock_quote_string.assert_called_once_with(mock.sentinel.path)
         if is_junction:
             cmd = ('[System.IO.Directory]::Delete('
                    '%(path)s, %(recurse)d)'
-                   % dict(path=mock.sentinel.quote_string,
+                   % dict(path=self._windows_utils._quote_string(
+                          mock.sentinel.path),
                           recurse=False))
         else:
-            cmd = ["Remove-Item", "-Confirm:$false",
-                   "-Path", mock.sentinel.quote_string, '-Force']
+            cmd = ["Remove-Item", "-Confirm:$false", "-Path",
+                   self._windows_utils._quote_string(mock.sentinel.path),
+                   "-Force"]
 
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
 
@@ -320,37 +309,33 @@ class WindowsUtilsTestCase(test.TestCase):
                "-ServerAddresses", "('A','B','C')"]
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
 
-    @mock.patch.object(windows_utils.WindowsUtils, '_quote_string')
-    def test_set_win_reg_value(self, mock_quote_string):
-        mock_quote_string.return_value = mock.sentinel.quote_string
-
+    def test_set_win_reg_value(self):
         self._windows_utils.set_win_reg_value(mock.sentinel.server,
                                               mock.sentinel.path,
                                               mock.sentinel.key,
                                               mock.sentinel.value)
 
-        mock_quote_string.assert_called_once_with(mock.sentinel.path)
-        cmd = ['Set-ItemProperty', '-Path', mock.sentinel.quote_string,
+        cmd = ['Set-ItemProperty', '-Path',
+               self._windows_utils._quote_string(mock.sentinel.path),
                '-Name', mock.sentinel.key, '-Value', mock.sentinel.value]
         self._remote_exec.assert_called_once_with(mock.sentinel.server, cmd)
 
     @ddt.data(None, mock.sentinel.name)
-    @mock.patch.object(windows_utils.WindowsUtils, '_quote_string')
-    def test_get_win_reg_value(self, name, mock_quote_string):
-        mock_quote_string.return_value = mock.sentinel.quote_string
-        self._remote_exec.return_value = ["A", "B"]
+    def test_get_win_reg_value(self, name):
+        self._remote_exec.return_value = mock.sentinel.value, None
 
         result = self._windows_utils.get_win_reg_value(mock.sentinel.server,
                                                        mock.sentinel.path,
                                                        name=name)
 
-        cmd = "Get-ItemProperty -Path %s" % mock.sentinel.quote_string
+        cmd = "Get-ItemProperty -Path %s" % (
+            self._windows_utils._quote_string(mock.sentinel.path))
         if name:
             cmd += " | Select-Object -ExpandProperty %s" % name
         self._remote_exec.assert_called_once_with(mock.sentinel.server,
                                                   cmd,
                                                   retry=False)
-        self.assertEqual("A", result)
+        self.assertEqual(mock.sentinel.value, result)
 
     def test_quote_string(self):
         result = self._windows_utils._quote_string(mock.sentinel.string)
