@@ -29,7 +29,7 @@ def _create_delete_ro_access_rule(self):
     :param self: instance of test class
     """
     rule = self.shares_client.create_access_rule(
-        self.share["id"], 'ip', '2.2.2.2', 'ro')
+        self.share["id"], self.access_type, self.access_to, 'ro')
     self.assertEqual('ro', rule['access_level'])
     self.shares_client.wait_for_access_rule_status(
         self.share["id"], rule["id"], "active")
